@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PhepesiStreams</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+    <script type="module">
+        import * as THREE from 'https://unpkg.com/three@0.112/build/three.module.js';
+        import { OrbitControls } from 'https://unpkg.com/three@0.112/examples/jsm/controls/OrbitControls.js';
+
+        let scene, camera, renderer, sphere, controls;
+        let streams = [];
+        const numOfStreams = 450; // Reduced for performance
+        const sphereRadius = 100;
+
+        function init() {
+            scene = new THREE.Scene();
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 0, 300);
+
+            renderer = new THREE.WebGLRenderer();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.25;
+            controls.screenSpacePanning = false;
+            controls.update();
+
+            const ambientLight = new THREE.AmbientLight(0x222222);
+            scene.add(ambientLight);
+
+            const light = new THREE.DirectionalLight(0xffffff, 1);
+            light.position.set(20, 20, 0);
+            scene.add(light);
+
+            const axesHelper = new THREE.AxesHelper(150);
+            scene.add(axesHelper);
+
+            const geometry = new THREE.SphereGeometry(sphereRadius, 32, 32);
+            const material = new THREE.MeshPhongMaterial({
+                color: 0x555555,
+                flatShading: true,
+                transparent: true,
+                opacity: 0,
+                wireframe: false
+            });
+            sphere = new THREE.Mesh(geometry, material);
+            scene.add(sphere);
+
+            generateStreams();
+
+            window.addEventListener('resize', onWindowResize, false);
+        }
+
+        function generateStreams() {
+            for (let i = 0; i < numOfStreams; i++) {
+                const stream = new Stream();
+                streams.push(stream);
+                scene.add(stream.line);
+            }
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        class Stream {
+            constructor() {
+                this.points = [];
+                this.noiseOffsetX = Math.random() * 1000;
+                this.noiseOffsetY = Math.random() * 1000;
+                this.noiseOffsetZ = Math.random() * 1000;
+                this.noiseOffset = Math.random() * 1000;
+                this.currentDirection = new THREE.Vector3(
+                    Math.random() * 2 - 1,
+                    Math.random() * 2 - 1,
+                    Math.random() * 2 - 1
+                ).normalize();
+
+                // Create initial points within the sphere
+                for (let i = 0; i < 10; i++) { // Start with 10 points
+                    const phi = Math.random() * Math.PI * 2;
+                    const theta = Math.random() * Math.PI;
+                    const x = Math.random() * sphereRadius * Math.sin(theta) * Math.cos(phi);
+                    const y = Math.random() * sphereRadius * Math.sin(theta) * Math.sin(phi);
+                    const z = Math.random() * sphereRadius * Math.cos(theta);
+                    this.points.push(new THREE.Vector3(x, y, z));
+                }
+
+                const material = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 2 });
+                const geometry = new THREE.BufferGeometry().setFromPoints(this.points);
+                this.line = new THREE.Line(geometry, material);
+            }
+
+            update() {
+                const lastPoint = this.points[this.points.length - 1];
+
+                // Use Perlin noise to create curvy paths
+                this.currentDirection.x += (Math.random() - 0.5) * 0.1 + (noise(this.noiseOffsetX) - 0.5) * 0.5;
+                this.currentDirection.y += (Math.random() - 0.5) * 0.1 + (noise(this.noiseOffsetY) - 0.5) * 0.5;
+                this.currentDirection.z += (Math.random() - 0.5) * 0.1 + (noise(this.noiseOffsetZ) - 0.5) * 0.5;
+                this.currentDirection.normalize();
+
+                // Calculate the angle variation using Perlin noise
+                let angleVariation = map(noise(this.noiseOffset), 0, 1, -Math.PI, Math.PI);
+                this.noiseOffset += 0.01;
+
+                // Apply the angle variation to the current direction
+                const axis = new THREE.Vector3(
+                    Math.random() * 2 - 1,
+                    Math.random() * 2 - 1,
+                    Math.random() * 2 - 1
+                ).normalize();
+                this.currentDirection.applyAxisAngle(axis, angleVariation);
+
+                const speed = 1;
+                let newPoint = lastPoint.clone().add(this.currentDirection.clone().multiplyScalar(speed));
+
+                // Ensure the point stays within the sphere and bounce back if it hits the boundary
+                if (newPoint.length() > sphereRadius) {
+                    this.currentDirection.multiplyScalar(-1); // Reverse direction
+                    newPoint = lastPoint.clone().add(this.currentDirection.clone().multiplyScalar(speed));
+                }
+
+                this.points.push(newPoint);
+
+                if (this.points.length > 100) {
+                    this.points.shift();
+                }
+
+                this.line.geometry.setFromPoints(this.points);
+
+                // Increment noise offsets for smooth variation
+                this.noiseOffsetX += 0.01;
+                this.noiseOffsetY += 0.01;
+                this.noiseOffsetZ += 0.01;
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            for (let stream of streams) {
+                stream.update();
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // Utility function to map values from one range to another
+        function map(value, start1, stop1, start2, stop2) {
+            return start2 + (stop2 - start2) * ((value - start1) / (stop1 - start1));
+        }
+
+        // Simple noise function
+        function noise(x) {
+            return Math.sin(x) * 0.5 + 0.5;
+        }
+
+        init();
+        animate();
+    </script>
+</body>
+
+</html>
