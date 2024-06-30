@@ -24,7 +24,7 @@
 
         let scene, camera, renderer, sphere, controls;
         let streams = [];
-        const numOfStreams = 450; // Reduced for performance
+        const numOfStreams = 750; // Reduced for performance
         const sphereRadius = 100;
 
         function init() {
@@ -50,8 +50,8 @@
             light.position.set(20, 20, 0);
             scene.add(light);
 
-            const axesHelper = new THREE.AxesHelper(150);
-            scene.add(axesHelper);
+            // const axesHelper = new THREE.AxesHelper(150);
+            // scene.add(axesHelper);
 
             const geometry = new THREE.SphereGeometry(sphereRadius, 32, 32);
             const material = new THREE.MeshPhongMaterial({
@@ -143,11 +143,18 @@
 
                 this.points.push(newPoint);
 
-                if (this.points.length > 100) {
+                if (this.points.length > 200) {
                     this.points.shift();
                 }
 
                 this.line.geometry.setFromPoints(this.points);
+
+                // Update the color based on the distance from the center
+                const distanceFromCenter = newPoint.length();
+                const lightBlue = new THREE.Color(0.851, 1, 0.882); // RGB for light blue
+                const darkBlue = new THREE.Color(0.671, 0.047, 0.451); // RGB for dark blue
+                const color = lightBlue.clone().lerp(darkBlue, distanceFromCenter / sphereRadius);
+                this.line.material.color.set(color);
 
                 // Increment noise offsets for smooth variation
                 this.noiseOffsetX += 0.01;
